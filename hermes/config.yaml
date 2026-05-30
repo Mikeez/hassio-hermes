@@ -10,7 +10,7 @@ startup: application
 boot: auto
 
 ingress: true
-ingress_port: 9119
+ingress_port: 49268
 panel_icon: mdi:robot
 panel_title: Hermes Agent
 

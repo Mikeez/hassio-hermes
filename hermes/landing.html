@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hermes Agent</title>
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;height:100%;overflow:hidden;background:#111111;color:#e6edf3;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  body{display:flex;flex-direction:column}
+  .bar{display:flex;align-items:center;gap:10px;padding:4px 12px;background:#1c1c1c;border-bottom:1px solid #1f2937;min-height:32px;flex-shrink:0}
+  .bar h1{margin:0;font-size:13px;color:#ffd700;font-weight:600;letter-spacing:.02em}
+  .status{margin-left:auto;display:flex;gap:12px;font-size:11px;color:#9ca3af}
+  iframe{flex:1;border:0;background:#000}
+</style>
+</head>
+<body>
+<div class="bar">
+  <h1>&#x1F9E0; Hermes Agent</h1>
+  <div class="status">
+    <span id="st-api">&#x23F3; API</span>
+    <span id="st-dashboard">&#x23F3; Dashboard</span>
+  </div>
+</div>
+<iframe src="./dashboard/" title="Hermes Dashboard"></iframe>
+<script>
+(function () {
+  function poll(id, url) {
+    var el = document.getElementById(id);
+    fetch(url, {cache: 'no-store'})
+      .then(function (r) { el.textContent = r.ok ? '✅ ' + id.replace('st-','') : '⚠️ ' + id.replace('st-',''); })
+      .catch(function () { el.textContent = '⚠️ ' + id.replace('st-',''); });
+  }
+  poll('st-api', './v1/health');
+  poll('st-dashboard', './dashboard/api/status');
+  setInterval(function () {
+    poll('st-api', './v1/health');
+    poll('st-dashboard', './dashboard/api/status');
+  }, 15000);
+})();
+</script>
+</body>
+</html>

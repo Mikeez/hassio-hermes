@@ -13,16 +13,15 @@ fi
 mkdir -p /config/hermes
 export HERMES_DATA_DIR=/config/hermes
 
-# ── API server ────────────────────────────────────────────────────────
+# ── Hermes environment ────────────────────────────────────────────────
 export API_SERVER_ENABLED=true
-export API_SERVER_HOST=0.0.0.0
+export API_SERVER_HOST=127.0.0.1
 export API_SERVER_PORT=8642
 export API_SERVER_KEY="${API_KEY}"
 export API_SERVER_CORS_ORIGINS="${CORS_ORIGINS}"
 
-# ── Dashboard ─────────────────────────────────────────────────────────
 export HERMES_DASHBOARD=1
-export HERMES_DASHBOARD_HOST=0.0.0.0
+export HERMES_DASHBOARD_HOST=127.0.0.1
 export HERMES_DASHBOARD_PORT=9119
 
 # ── Extra env vars ────────────────────────────────────────────────────
@@ -34,5 +33,29 @@ if bashio::config.exists 'extra_env'; then
     done
 fi
 
+# ── Graceful shutdown ─────────────────────────────────────────────────
+NGINX_PID=""
+HERMES_PID=""
+
+cleanup() {
+    bashio::log.info "Shutting down..."
+    [ -n "${HERMES_PID}" ] && kill "${HERMES_PID}" 2>/dev/null || true
+    [ -n "${NGINX_PID}" ]  && kill "${NGINX_PID}"  2>/dev/null || true
+    wait
+}
+trap cleanup SIGTERM SIGINT
+
+# ── Start nginx ───────────────────────────────────────────────────────
+bashio::log.info "Starting nginx..."
+nginx &
+NGINX_PID=$!
+
+# ── Start Hermes ──────────────────────────────────────────────────────
 bashio::log.info "Starting Hermes Agent..."
-exec hermes gateway run
+hermes gateway run &
+HERMES_PID=$!
+
+# ── Wait ──────────────────────────────────────────────────────────────
+wait "${HERMES_PID}"
+bashio::log.warning "Hermes exited — stopping add-on."
+kill "${NGINX_PID}" 2>/dev/null || true
