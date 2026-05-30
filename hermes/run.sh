@@ -120,6 +120,28 @@ else
     echo "[run] Hermes install up to date (skipping)"
 fi
 
+# ── Link agent-browser into project node_modules ─────────────────────
+if [ ! -e "$SRC_DIR/node_modules/agent-browser" ]; then
+    mkdir -p "$SRC_DIR/node_modules"
+    ln -snf /usr/lib/node_modules/agent-browser "$SRC_DIR/node_modules/agent-browser"
+    echo "[run] Linked agent-browser into project"
+fi
+
+# ── Build dashboard frontend ──────────────────────────────────────────
+if [ -f "$SRC_DIR/web/package.json" ]; then
+    if [ ! -d "$SRC_DIR/hermes_cli/web_dist/assets" ]; then
+        echo "[run] Building dashboard frontend (first run, takes a moment)..."
+        if (cd "$SRC_DIR/web" && npm install --silent 2>&1 | tail -3 \
+            && npx vite build --outDir ../hermes_cli/web_dist --emptyOutDir 2>&1 | tail -5); then
+            echo "[run] Dashboard frontend built"
+        else
+            echo "[run] Warning: dashboard build failed — dashboard UI will not be available"
+        fi
+    else
+        echo "[run] Dashboard frontend already built"
+    fi
+fi
+
 # ── Config scaffolding (first-run) ────────────────────────────────────
 if [ ! -f "$HERMES_BASE/.env" ] && [ -f "$SRC_DIR/.env.example" ]; then
     cp -p "$SRC_DIR/.env.example" "$HERMES_BASE/.env"

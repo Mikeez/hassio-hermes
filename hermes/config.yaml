@@ -1,7 +1,7 @@
 name: Hermes Agent
 slug: hermes_agent
 description: "The self-improving AI agent built by Nous Research."
-version: "0.4.2"
+version: "0.4.3"
 arch:
   - amd64
   - aarch64
