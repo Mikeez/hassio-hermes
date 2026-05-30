@@ -1,7 +1,7 @@
 name: Hermes Agent
 slug: hermes_agent
 description: "The self-improving AI agent built by Nous Research."
-version: "0.2.0"
+version: "0.3.0"
 arch:
   - amd64
   - aarch64
@@ -14,17 +14,28 @@ ingress_port: 49268
 panel_icon: mdi:robot
 panel_title: Hermes Agent
 
+map:
+  - addon_config:rw
+
 ports:
   8642/tcp: null
 ports_description:
   8642/tcp: "OpenAI-compatible API"
 
 options:
+  git_url: "https://github.com/NousResearch/hermes-agent.git"
+  git_ref: ""
+  git_token: ""
+  auto_update: false
   api_key: ""
   cors_origins: "*"
   extra_env: []
 
 schema:
+  git_url: url
+  git_ref: str?
+  git_token: password?
+  auto_update: bool
   api_key: password
   cors_origins: str
   extra_env:
