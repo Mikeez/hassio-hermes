@@ -8,7 +8,5 @@ RUN mkdir -p /data/hermes \
   && rm -rf /opt/data \
   && ln -s /data/hermes /opt/data
 
-COPY run.sh /run.sh
-RUN chmod a+x /run.sh
-
-CMD ["/run.sh"]
+COPY run.sh /etc/cont-init.d/03-ha-options
+RUN chmod a+x /etc/cont-init.d/03-ha-options

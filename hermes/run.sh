@@ -1,42 +1,50 @@
 #!/usr/bin/env sh
+# cont-init.d script: reads HA options.json and exports config into the
+# s6 container environment so main-hermes and dashboard pick it up.
 set -eu
 
 OPTIONS_FILE="/data/options.json"
+ENV_DIR="/var/run/s6/container_environment"
 
 if [ ! -f "$OPTIONS_FILE" ]; then
-  echo "Missing $OPTIONS_FILE"
-  exit 1
+  echo "[ha-options] $OPTIONS_FILE not found; using Hermes defaults."
+  exit 0
 fi
 
-API_ENABLED="$(python3 -c "import json;print(str(json.load(open('$OPTIONS_FILE')).get('api_server_enabled', True)).lower())")"
-API_KEY="$(python3 -c "import json;print(json.load(open('$OPTIONS_FILE')).get('api_server_key',''))")"
-DASHBOARD_ENABLED="$(python3 -c "import json;print(str(json.load(open('$OPTIONS_FILE')).get('dashboard_enabled', True)).lower())")"
-DASHBOARD_INSECURE="$(python3 -c "import json;print(str(json.load(open('$OPTIONS_FILE')).get('dashboard_insecure', False)).lower())")"
-CORS_ORIGINS="$(python3 -c "import json;print(json.load(open('$OPTIONS_FILE')).get('cors_origins','*'))")"
+json_get() {
+  python3 -c "
+import json, sys
+d = json.load(open('$OPTIONS_FILE'))
+v = d.get('$1', $2)
+print(str(v).lower() if isinstance(v, bool) else v)
+"
+}
+
+mkdir -p "$ENV_DIR"
+
+API_ENABLED="$(json_get api_server_enabled True)"
+API_KEY="$(json_get api_server_key '')"
+DASHBOARD_ENABLED="$(json_get dashboard_enabled True)"
+DASHBOARD_INSECURE="$(json_get dashboard_insecure False)"
+CORS_ORIGINS="$(json_get cors_origins '*')"
 
 if [ "$API_ENABLED" = "true" ]; then
-  export API_SERVER_ENABLED=true
-  export API_SERVER_HOST=0.0.0.0
-  export API_SERVER_PORT=8642
-  export API_SERVER_CORS_ORIGINS="$CORS_ORIGINS"
-
   if [ -z "$API_KEY" ]; then
-    echo "ERROR: api_server_key is required when API server is enabled."
+    echo "[ha-options] ERROR: api_server_key must not be empty when API server is enabled."
     exit 1
   fi
-
-  export API_SERVER_KEY="$API_KEY"
+  printf '%s' "true"          > "$ENV_DIR/API_SERVER_ENABLED"
+  printf '%s' "0.0.0.0"      > "$ENV_DIR/API_SERVER_HOST"
+  printf '%s' "8642"         > "$ENV_DIR/API_SERVER_PORT"
+  printf '%s' "$API_KEY"     > "$ENV_DIR/API_SERVER_KEY"
+  printf '%s' "$CORS_ORIGINS" > "$ENV_DIR/API_SERVER_CORS_ORIGINS"
 fi
 
 if [ "$DASHBOARD_ENABLED" = "true" ]; then
-  export HERMES_DASHBOARD=1
-  export HERMES_DASHBOARD_HOST=0.0.0.0
-  export HERMES_DASHBOARD_PORT=9119
-
-  if [ "$DASHBOARD_INSECURE" = "true" ]; then
-    export HERMES_DASHBOARD_INSECURE=1
-  fi
+  printf '%s' "1"       > "$ENV_DIR/HERMES_DASHBOARD"
+  printf '%s' "0.0.0.0" > "$ENV_DIR/HERMES_DASHBOARD_HOST"
+  printf '%s' "9119"    > "$ENV_DIR/HERMES_DASHBOARD_PORT"
+  [ "$DASHBOARD_INSECURE" = "true" ] && printf '%s' "1" > "$ENV_DIR/HERMES_DASHBOARD_INSECURE"
 fi
 
-echo "Starting Hermes Agent gateway..."
-exec hermes gateway run
+echo "[ha-options] Configuration applied."
