@@ -199,6 +199,13 @@ set +a
 mkdir -p "$HERMES_BASE/data"
 export HERMES_DATA_DIR="$HERMES_BASE/data"
 
+# ── Ensure default profile exists ─────────────────────────────────────
+if ! hermes profile list 2>/dev/null | grep -q "default"; then
+    echo "[run] Creating default Hermes profile..."
+    hermes profile create default
+    echo "[run] Default profile created"
+fi
+
 # ── Switch nginx to full proxy config ─────────────────────────────────
 cp /etc/nginx/nginx.full.conf /etc/nginx/nginx.conf
 nginx -s reload
