@@ -173,9 +173,11 @@ set_env "API_SERVER_HOST"        "127.0.0.1"
 set_env "API_SERVER_PORT"        "8642"
 set_env "API_SERVER_KEY"         "$API_KEY"
 set_env "API_SERVER_CORS_ORIGINS" "${CORS_ORIGINS:-*}"
-set_env "HERMES_DASHBOARD"       "1"
+set_env "HERMES_DASHBOARD"        "1"
 set_env "HERMES_DASHBOARD_HOST"  "127.0.0.1"
 set_env "HERMES_DASHBOARD_PORT"  "9119"
+# API key protects the endpoint; allow all platform users through the gateway
+set_env "GATEWAY_ALLOW_ALL_USERS" "true"
 
 # Extra env vars from addon config
 RESERVED="API_SERVER_ENABLED|API_SERVER_HOST|API_SERVER_PORT|API_SERVER_KEY|HERMES_DASHBOARD|HERMES_DASHBOARD_HOST|HERMES_DASHBOARD_PORT|HERMES_HOME|HERMES_GATEWAY_NO_SUPERVISE"
@@ -213,15 +215,31 @@ echo "[run] nginx switched to full config"
 
 # ── Graceful shutdown ─────────────────────────────────────────────────
 GATEWAY_PID=""
+DASHBOARD_PID=""
 
 cleanup() {
     echo "[run] Shutting down..."
     nginx -s quit 2>/dev/null || true
-    [ -n "$GATEWAY_PID" ] && kill -TERM "$GATEWAY_PID" 2>/dev/null || true
+    [ -n "$DASHBOARD_PID" ] && kill -TERM "$DASHBOARD_PID" 2>/dev/null || true
+    [ -n "$GATEWAY_PID" ]   && kill -TERM "$GATEWAY_PID"   2>/dev/null || true
     wait
     exit 0
 }
 trap cleanup SIGTERM SIGINT
+
+# ── Start dashboard ───────────────────────────────────────────────────
+if python3 -c "from hermes_cli.web_server import start_server" 2>/dev/null; then
+    echo "[run] Starting dashboard on port 9119..."
+    cd "$HERMES_BASE"
+    python3 -c "
+from hermes_cli.web_server import start_server
+start_server(host='127.0.0.1', port=9119, open_browser=False)
+" &
+    DASHBOARD_PID=$!
+    echo "[run] Dashboard started (PID: $DASHBOARD_PID)"
+else
+    echo "[run] Dashboard module not available — skipping"
+fi
 
 # ── Start Hermes gateway ──────────────────────────────────────────────
 start_gateway() {
