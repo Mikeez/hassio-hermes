@@ -1,12 +1,30 @@
-FROM nousresearch/hermes-agent:latest
+ARG BUILD_FROM
+FROM ${BUILD_FROM}
 
-USER root
+# ── System dependencies ──────────────────────────────────────────────
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        git \
+        python3 python3-pip python3-venv \
+        build-essential python3-dev libffi-dev \
+        ripgrep \
+        chromium \
+        sqlite3 libsqlite3-dev \
+    && rm -rf /var/lib/apt/lists/*
 
-# Home Assistant add-ons persist /data.
-# Hermes expects /opt/data, so point Hermes storage at persistent add-on storage.
-RUN mkdir -p /data/hermes \
-  && rm -rf /opt/data \
-  && ln -s /data/hermes /opt/data
+ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium
 
-COPY run.sh /etc/cont-init.d/03-ha-options
-RUN chmod a+x /etc/cont-init.d/03-ha-options
+# ── uv ───────────────────────────────────────────────────────────────
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+ENV UV_LINK_MODE=copy
+
+# ── Hermes Agent ─────────────────────────────────────────────────────
+ARG HERMES_REF=main
+RUN git clone --recurse-submodules --depth 1 --branch "${HERMES_REF}" \
+        https://github.com/NousResearch/hermes-agent.git /opt/hermes \
+    && uv pip install --system -e /opt/hermes
+
+# ── Add-on entrypoint ────────────────────────────────────────────────
+COPY run.sh /run.sh
+RUN chmod +x /run.sh
+
+CMD ["/run.sh"]

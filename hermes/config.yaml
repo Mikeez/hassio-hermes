@@ -1,36 +1,32 @@
 name: Hermes Agent
 slug: hermes_agent
-description: Hermes Agent running inside Home Assistant OS
-version: "0.1.0"
+description: "The self-improving AI agent built by Nous Research."
+version: "0.2.0"
 arch:
   - amd64
   - aarch64
-startup: services
-boot: auto
 init: false
+startup: application
+boot: auto
+
+ingress: true
+ingress_port: 9119
+panel_icon: mdi:robot
+panel_title: Hermes Agent
 
 ports:
-  8642/tcp: 8642
-  9119/tcp: 9119
-
+  8642/tcp: null
 ports_description:
-  8642/tcp: Hermes Gateway / OpenAI-compatible API
-  9119/tcp: Hermes Dashboard
+  8642/tcp: "OpenAI-compatible API"
 
 options:
-  api_server_enabled: true
-  api_server_key: ""
-  dashboard_enabled: true
-  dashboard_insecure: false
+  api_key: ""
   cors_origins: "*"
   extra_env: []
 
 schema:
-  api_server_enabled: bool
-  api_server_key: password
-  dashboard_enabled: bool
-  dashboard_insecure: bool
+  api_key: password
   cors_origins: str
   extra_env:
     - name: str
-      value: password
+      value: str
