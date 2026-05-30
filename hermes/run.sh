@@ -129,8 +129,17 @@ fi
 
 # ── Build dashboard frontend ──────────────────────────────────────────
 if [ -f "$SRC_DIR/web/package.json" ]; then
-    if [ ! -d "$SRC_DIR/hermes_cli/web_dist/assets" ]; then
-        echo "[run] Building dashboard frontend (first run, takes a moment)..."
+    # Apply HA Ingress path patches before building so asset URLs are relative
+    DASHBOARD_REBUILD="false"
+    PATCH_STATUS="$(mktemp)"
+    if ! python3 /usr/local/bin/hermes-dashboard-patches "$SRC_DIR" "$PATCH_STATUS"; then
+        echo "[run] Warning: dashboard patches failed — continuing anyway"
+    fi
+    [ -s "$PATCH_STATUS" ] && DASHBOARD_REBUILD="true"
+    rm -f "$PATCH_STATUS"
+
+    if [ "$DASHBOARD_REBUILD" = "true" ] || [ ! -d "$SRC_DIR/hermes_cli/web_dist/assets" ]; then
+        echo "[run] Building dashboard frontend..."
         if (cd "$SRC_DIR/web" && npm install --silent 2>&1 | tail -3 \
             && npx vite build --outDir ../hermes_cli/web_dist --emptyOutDir 2>&1 | tail -5); then
             echo "[run] Dashboard frontend built"

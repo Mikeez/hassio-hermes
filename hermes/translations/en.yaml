@@ -1,0 +1,33 @@
+configuration:
+  git_url:
+    name: Git Repository URL
+    description: Hermes Agent git repository URL. Defaults to the official NousResearch repo.
+  git_ref:
+    name: Git Branch / Tag
+    description: >-
+      Branch, tag, or commit hash to check out.
+      Leave empty to use the repository's default branch.
+  git_token:
+    name: Git / GitHub Token
+    description: >-
+      Personal access token for private repositories (optional).
+      Also exported as GITHUB_TOKEN for gh CLI and Hermes skills.
+  auto_update:
+    name: Auto Update
+    description: Pull the latest changes from the git repository on every restart.
+  api_key:
+    name: API Key
+    description: >-
+      Bearer token required to authenticate requests to the OpenAI-compatible API.
+      Must not be empty. Treat this like a password.
+  cors_origins:
+    name: CORS Origins
+    description: >-
+      Allowed CORS origins for the API server.
+      Use * to allow all origins, or specify a comma-separated list of domains.
+  extra_env:
+    name: Extra Environment Variables
+    description: >-
+      Additional environment variables written to ~/.hermes/.env on each start.
+      Use for LLM provider API keys (e.g. OPENROUTER_API_KEY, OPENAI_API_KEY).
+      Non-empty values override existing .env entries.

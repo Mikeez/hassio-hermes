@@ -29,6 +29,10 @@ RUN mkdir -p /var/www /var/log/nginx /run/nginx
 COPY landing.html loading.html /var/www/
 COPY nginx.conf /etc/nginx/nginx.full.conf
 
+# ── Add-on support scripts ────────────────────────────────────────────
+COPY dashboard-patches.py /usr/local/bin/hermes-dashboard-patches
+RUN chmod +x /usr/local/bin/hermes-dashboard-patches
+
 # ── Add-on entrypoint ────────────────────────────────────────────────
 COPY run.sh /run.sh
 RUN chmod +x /run.sh
