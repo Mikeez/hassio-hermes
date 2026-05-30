@@ -19,14 +19,12 @@ API_KEY=$(opt api_key)
 CORS_ORIGINS=$(opt cors_origins)
 
 # ── System setup ──────────────────────────────────────────────────────
-# Timezone: sync from HA host
 if [ -n "${TZ:-}" ] && [[ "$TZ" != *..* ]] && [ -f "/usr/share/zoneinfo/$TZ" ]; then
     ln -snf "/usr/share/zoneinfo/$TZ" /etc/localtime
     echo "$TZ" > /etc/timezone
     echo "[run] Timezone: $TZ"
 fi
 
-# IPv4 DNS priority (home networks are almost never IPv6-only)
 if grep -q "^#[[:space:]]*precedence ::ffff:0:0/96  100" /etc/gai.conf 2>/dev/null; then
     sed -i 's/^#[[:space:]]*\(precedence ::ffff:0:0\/96  100\)/\1/' /etc/gai.conf
 elif ! grep -q "^precedence ::ffff:0:0/96  100" /etc/gai.conf 2>/dev/null; then
@@ -39,13 +37,15 @@ SRC_DIR="$HERMES_BASE/hermes-agent"
 VENV_DIR="$SRC_DIR/venv"
 MARKER_FILE="$HERMES_BASE/.install-marker"
 INGRESS_PORT=49268
+TTYD_HERMES_PORT=49269
+TTYD_TERMINAL_PORT=49369
 
 export HERMES_HOME="$HERMES_BASE"
 export HERMES_GATEWAY_NO_SUPERVISE=1
 
 mkdir -p "$HERMES_BASE"
 
-# ── Start nginx with loading page (shown while Hermes installs) ───────
+# ── Start nginx with loading page ─────────────────────────────────────
 cat > /etc/nginx/nginx.conf << LOADCONF
 worker_processes 1;
 pid /var/run/nginx.pid;
@@ -129,7 +129,6 @@ fi
 
 # ── Build dashboard frontend ──────────────────────────────────────────
 if [ -f "$SRC_DIR/web/package.json" ]; then
-    # Apply HA Ingress path patches before building so asset URLs are relative
     DASHBOARD_REBUILD="false"
     PATCH_STATUS="$(mktemp)"
     if ! python3 /usr/local/bin/hermes-dashboard-patches "$SRC_DIR" "$PATCH_STATUS"; then
@@ -177,6 +176,49 @@ SOUL_EOF
     echo "[run] Created SOUL.md template"
 fi
 
+# ── Shell environment for terminal sessions ───────────────────────────
+# .bashrc: persistent, user-editable
+if [ ! -f /config/.bashrc ]; then
+    cat > /config/.bashrc << 'BASHRC'
+# Source Hermes environment (paths, API keys)
+[ -f ~/.hermes_profile ] && . ~/.hermes_profile
+
+case $- in *i*) ;; *) return;; esac
+
+cd ~
+HISTCONTROL=ignoreboth
+shopt -s histappend
+HISTSIZE=100000
+HISTFILESIZE=100000
+shopt -s checkwinsize
+
+PS1='\[\033[01;34m\]\w\[\033[00m\]\$ '
+
+if [ -x /usr/bin/dircolors ]; then
+    eval "$(dircolors -b)"
+    alias ls='ls --color=auto'
+    alias grep='grep --color=auto'
+fi
+alias ll='ls -Al'
+alias l='ls -CF'
+
+if ! shopt -oq posix; then
+    [ -f /usr/share/bash-completion/bash_completion ] \
+        && . /usr/share/bash-completion/bash_completion
+fi
+BASHRC
+    echo "[run] Created default .bashrc"
+fi
+
+# .hermes_profile: regenerated every start (has current venv path + env vars)
+cat > /config/.hermes_profile << ENVSH
+export HERMES_HOME="$HERMES_BASE"
+export HERMES_GATEWAY_NO_SUPERVISE=1
+export HERMES_VERSION="$(hermes --version 2>/dev/null | head -1 || echo unknown)"
+export PATH="$VENV_DIR/bin:\$PATH"
+ENVSH
+echo "[run] Updated .hermes_profile"
+
 # ── Validate ──────────────────────────────────────────────────────────
 if [ -z "$API_KEY" ]; then
     echo "[run] FATAL: api_key must not be empty"
@@ -186,7 +228,7 @@ fi
 HERMES_VERSION=$(hermes --version 2>/dev/null | head -1 || echo "unknown")
 echo "[run] Hermes version: $HERMES_VERSION"
 
-# ── Write config to .env (Hermes reads this via dotenv) ───────────────
+# ── Write config to .env ──────────────────────────────────────────────
 ENV_FILE="$HERMES_BASE/.env"
 touch "$ENV_FILE" && chmod 600 "$ENV_FILE"
 
@@ -199,19 +241,17 @@ set_env() {
     fi
 }
 
-set_env "API_SERVER_ENABLED"     "true"
-set_env "API_SERVER_HOST"        "127.0.0.1"
-set_env "API_SERVER_PORT"        "8642"
-set_env "API_SERVER_KEY"         "$API_KEY"
+set_env "API_SERVER_ENABLED"      "true"
+set_env "API_SERVER_HOST"         "127.0.0.1"
+set_env "API_SERVER_PORT"         "8642"
+set_env "API_SERVER_KEY"          "$API_KEY"
 set_env "API_SERVER_CORS_ORIGINS" "${CORS_ORIGINS:-*}"
 set_env "HERMES_DASHBOARD"        "1"
-set_env "HERMES_DASHBOARD_HOST"  "127.0.0.1"
-set_env "HERMES_DASHBOARD_PORT"  "9119"
-# API key protects the endpoint; allow all platform users through the gateway
+set_env "HERMES_DASHBOARD_HOST"   "127.0.0.1"
+set_env "HERMES_DASHBOARD_PORT"   "9119"
 set_env "GATEWAY_ALLOW_ALL_USERS" "true"
 
-# Extra env vars from addon config
-RESERVED="API_SERVER_ENABLED|API_SERVER_HOST|API_SERVER_PORT|API_SERVER_KEY|HERMES_DASHBOARD|HERMES_DASHBOARD_HOST|HERMES_DASHBOARD_PORT|HERMES_HOME|HERMES_GATEWAY_NO_SUPERVISE"
+RESERVED="API_SERVER_ENABLED|API_SERVER_HOST|API_SERVER_PORT|API_SERVER_KEY|HERMES_DASHBOARD|HERMES_DASHBOARD_HOST|HERMES_DASHBOARD_PORT|HERMES_HOME|HERMES_GATEWAY_NO_SUPERVISE|GATEWAY_ALLOW_ALL_USERS"
 ENV_COUNT=$(jq '.extra_env | length' "$OPTIONS_FILE" 2>/dev/null || echo 0)
 for i in $(seq 0 $((ENV_COUNT - 1))); do
     VAR_NAME=$(jq -r ".extra_env[$i].name" "$OPTIONS_FILE")
@@ -223,7 +263,6 @@ for i in $(seq 0 $((ENV_COUNT - 1))); do
     [ -n "$VAR_VALUE" ] && set_env "$VAR_NAME" "$VAR_VALUE"
 done
 
-# Source .env so the gateway process inherits everything
 set -a
 # shellcheck disable=SC1091
 source "$ENV_FILE"
@@ -244,19 +283,50 @@ cp /etc/nginx/nginx.full.conf /etc/nginx/nginx.conf
 nginx -s reload
 echo "[run] nginx switched to full config"
 
-# ── Graceful shutdown ─────────────────────────────────────────────────
+# ── Process tracking ──────────────────────────────────────────────────
 GATEWAY_PID=""
 DASHBOARD_PID=""
+TTYD_HERMES_PID=""
+TTYD_TERMINAL_PID=""
 
 cleanup() {
     echo "[run] Shutting down..."
     nginx -s quit 2>/dev/null || true
-    [ -n "$DASHBOARD_PID" ] && kill -TERM "$DASHBOARD_PID" 2>/dev/null || true
-    [ -n "$GATEWAY_PID" ]   && kill -TERM "$GATEWAY_PID"   2>/dev/null || true
+    for pid in "$TTYD_HERMES_PID" "$TTYD_TERMINAL_PID" "$DASHBOARD_PID" "$GATEWAY_PID"; do
+        [ -n "$pid" ] && kill -TERM "$pid" 2>/dev/null || true
+    done
     wait
     exit 0
 }
 trap cleanup SIGTERM SIGINT
+
+# ── start-hermes wrapper for ttyd ─────────────────────────────────────
+cat > /usr/local/bin/start-hermes << 'WRAPPER'
+#!/bin/bash
+source ~/.bashrc
+hermes
+ret=$?
+if [ $ret -eq 0 ]; then exit 0; fi
+echo ""
+echo "Hermes exited (code $ret). Run 'hermes' to restart, or 'exit' to close."
+exec bash
+WRAPPER
+chmod +x /usr/local/bin/start-hermes
+
+# ── Start ttyd terminals ──────────────────────────────────────────────
+echo "[run] Starting ttyd (Hermes: $TTYD_HERMES_PORT, Terminal: $TTYD_TERMINAL_PORT)..."
+
+ttyd --port "$TTYD_HERMES_PORT" --interface 127.0.0.1 \
+     --base-path /hermes/ --writable -d 3 \
+     tmux -u new -A -s hermes /usr/local/bin/start-hermes &
+TTYD_HERMES_PID=$!
+
+ttyd --port "$TTYD_TERMINAL_PORT" --interface 127.0.0.1 \
+     --base-path /terminal/ --writable -d 3 \
+     tmux -u new -A -s terminal /usr/bin/bash &
+TTYD_TERMINAL_PID=$!
+
+echo "[run] ttyd started (Hermes PID: $TTYD_HERMES_PID, Terminal PID: $TTYD_TERMINAL_PID)"
 
 # ── Start dashboard ───────────────────────────────────────────────────
 if python3 -c "from hermes_cli.web_server import start_server" 2>/dev/null; then
@@ -284,8 +354,10 @@ start_gateway
 
 echo "─────────────────────────────────────────────"
 echo " $HERMES_VERSION"
-echo " Gateway: http://127.0.0.1:8642"
-echo " Dashboard: http://127.0.0.1:9119"
+echo " Hermes CLI:  http://127.0.0.1:$TTYD_HERMES_PORT"
+echo " Terminal:    http://127.0.0.1:$TTYD_TERMINAL_PORT"
+echo " Dashboard:   http://127.0.0.1:9119"
+echo " API:         http://127.0.0.1:8642"
 echo "─────────────────────────────────────────────"
 
 # ── Supervisor loop ───────────────────────────────────────────────────

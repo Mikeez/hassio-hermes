@@ -8,35 +8,73 @@
   *{box-sizing:border-box}
   html,body{margin:0;padding:0;height:100%;overflow:hidden;background:#111111;color:#e6edf3;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
   body{display:flex;flex-direction:column}
-  .bar{display:flex;align-items:center;gap:10px;padding:4px 12px;background:#1c1c1c;border-bottom:1px solid #1f2937;min-height:32px;flex-shrink:0}
-  .bar h1{margin:0;font-size:13px;color:#ffd700;font-weight:600;letter-spacing:.02em}
-  .status{margin-left:auto;display:flex;gap:12px;font-size:11px;color:#9ca3af}
-  iframe{flex:1;border:0;background:#000}
+  .bar{display:flex;align-items:center;gap:8px;padding:4px 10px;background:#1c1c1c;border-bottom:1px solid #1f2937;min-height:32px;flex-shrink:0}
+  .bar .title{color:#ffd700;font-size:12px;font-weight:600;white-space:nowrap}
+  .bar .buttons{display:flex;gap:6px;margin:0 8px}
+  .bar .status{display:flex;gap:10px;margin-left:auto;font-size:11px;color:#9ca3af}
+  .btn{background:#009ac7;color:#fff;border:0;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:12px;text-decoration:none;display:inline-block}
+  .btn.secondary{background:#334155}
+  .btn.active{background:#f36d00}
+  .btn:hover{filter:brightness(1.15)}
+  .pane{flex:1;position:relative;overflow:hidden}
+  .pane iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:#000}
+  .pane iframe.hidden{display:none}
 </style>
 </head>
 <body>
+
 <div class="bar">
-  <h1>&#x1F9E0; Hermes Agent</h1>
+  <span class="title">&#x1F9E0; Hermes Agent</span>
+  <div class="buttons">
+    <button class="btn active"    id="btnHermes"   onclick="show('hermes')">Hermes</button>
+    <button class="btn secondary" id="btnDashboard" onclick="show('dashboard')">Dashboard</button>
+    <button class="btn secondary" id="btnTerminal"  onclick="show('terminal')">Terminal</button>
+  </div>
   <div class="status">
     <span id="st-api">&#x23F3; API</span>
-    <span id="st-dashboard">&#x23F3; Dashboard</span>
+    <span id="st-dash">&#x23F3; Dashboard</span>
   </div>
 </div>
-<iframe src="./dashboard/" title="Hermes Dashboard"></iframe>
+
+<div class="pane">
+  <iframe id="fHermes"   src="./hermes/"   title="Hermes Agent"></iframe>
+  <iframe id="fDashboard" src=""            title="Dashboard"    class="hidden"></iframe>
+  <iframe id="fTerminal"  src=""            title="Terminal"     class="hidden"></iframe>
+</div>
+
 <script>
 (function () {
-  function poll(id, url) {
+  var frames   = { hermes: 'fHermes',   dashboard: 'fDashboard',  terminal: 'fTerminal'  };
+  var btns     = { hermes: 'btnHermes', dashboard: 'btnDashboard', terminal: 'btnTerminal' };
+  var srcs     = { hermes: './hermes/', dashboard: './dashboard/', terminal: './terminal/' };
+  var loaded   = { hermes: true, dashboard: false, terminal: false };
+  var current  = 'hermes';
+
+  window.show = function (mode) {
+    if (mode === current) return;
+    document.getElementById(frames[current]).className = 'hidden';
+    document.getElementById(btns[current]).className   = 'btn secondary';
+    current = mode;
+    document.getElementById(btns[mode]).className = 'btn active';
+    var f = document.getElementById(frames[mode]);
+    f.className = '';
+    if (!loaded[mode]) { f.src = srcs[mode]; loaded[mode] = true; }
+  };
+
+  function poll(id, url, label) {
     var el = document.getElementById(id);
-    fetch(url, {cache: 'no-store'})
-      .then(function (r) { el.textContent = r.ok ? '✅ ' + id.replace('st-','') : '⚠️ ' + id.replace('st-',''); })
-      .catch(function () { el.textContent = '⚠️ ' + id.replace('st-',''); });
+    fetch(url, { cache: 'no-store' })
+      .then(function (r) { el.textContent = (r.ok ? '✅ ' : '⚠️ ') + label; })
+      .catch(function ()  { el.textContent = '⚠️ ' + label; });
   }
-  poll('st-api', './v1/health');
-  poll('st-dashboard', './dashboard/api/status');
-  setInterval(function () {
-    poll('st-api', './v1/health');
-    poll('st-dashboard', './dashboard/api/status');
-  }, 15000);
+
+  function refresh() {
+    poll('st-api',  './v1/health',         'API');
+    poll('st-dash', './dashboard/api/status', 'Dashboard');
+  }
+
+  refresh();
+  setInterval(refresh, 15000);
 })();
 </script>
 </body>
