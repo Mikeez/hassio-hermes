@@ -1,7 +1,7 @@
 name: Hermes Agent
 slug: hermes_agent
 description: 'Hermes Agent - Nous Research'
-version: '0.7.0'
+version: '0.7.1'
 arch:
     - amd64
     - aarch64
